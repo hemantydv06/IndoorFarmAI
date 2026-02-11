@@ -123,6 +123,23 @@ col2.metric("🌾 Crops", "5")
 col3.metric("📍 Markets", "Azadpur")
 col4.metric("👨‍🌾 Farmers", st.session_state.feedback_stats['total_sessions'])
 
+@st.cache_data(ttl=1800)  # 30min cache
+def get_weather(city="Mumbai"):
+    """Real Mumbai weather → Auto temp/humidity"""
+    try:
+        # OpenWeatherMap free tier
+        api_key = "YOUR_FREE_KEY"  # openweathermap.org
+        url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=metric"
+        resp = requests.get(url).json()
+        return resp['main']['temp'], resp['main']['humidity']
+    except:
+        return 25, 70  # Mumbai Feb avg
+
+# Auto-fill sliders
+temp, humidity = get_weather(location)
+temp = st.slider("Temperature (°C)", 15, 35, int(temp))
+humidity = st.slider("Humidity (%)", 40, 95, int(humidity))
+
 # Load model + prices
 with st.spinner("Loading ML model + live prices..."):
     model, scaler = train_model()
