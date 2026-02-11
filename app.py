@@ -6,280 +6,203 @@ from sklearn.preprocessing import StandardScaler
 import requests
 from bs4 import BeautifulSoup
 import time
-import json
-from datetime import datetime
 import uuid
+from datetime import datetime
 
 # Page config
-st.set_page_config(
-    page_title="IndoorFarmAI", 
-    page_icon="🌾",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="IndoorFarmAI", page_icon="🌾", layout="wide")
 
-# === SESSION & ANALYTICS TRACKING ===
+# === ANALYTICS TRACKING ===
 if 'session_id' not in st.session_state:
     st.session_state.session_id = str(uuid.uuid4())[:8]
 if 'analytics_data' not in st.session_state:
     st.session_state.analytics_data = []
 if 'feedback_stats' not in st.session_state:
-    st.session_state.feedback_stats = {
-        'total_sessions': 0, 'analyses_run': 0, 'feedback_completed': 0,
-        'farm_sizes': [], 'locations': [], 'avg_rating': 0
-    }
+    st.session_state.feedback_stats = {'sessions': 0, 'analyses': 0, 'feedback': 0, 'rating': 0}
 
-def track_session_event(event_type, details=""):
-    event = {
-        'session_id': st.session_state.session_id,
-        'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        'event_type': event_type,
+def track_event(event, details=""):
+    event_data = {
+        'session': st.session_state.session_id,
+        'time': datetime.now().strftime('%H:%M:%S'),
+        'event': event,
         'details': details
     }
-    st.session_state.analytics_data.append(event)
+    st.session_state.analytics_data.append(event_data)
     
-    if event_type == 'app_load':
-        st.session_state.feedback_stats['total_sessions'] += 1
-    elif event_type == 'analysis_run':
-        st.session_state.feedback_stats['analyses_run'] += 1
-    elif event_type == 'feedback_complete':
-        st.session_state.feedback_stats['feedback_completed'] += 1
+    if event == 'load':
+        st.session_state.feedback_stats['sessions'] += 1
+    elif event == 'analyze':
+        st.session_state.feedback_stats['analyses'] += 1
+    elif event == 'feedback':
+        st.session_state.feedback_stats['feedback'] += 1
 
-# Track app load
-track_session_event('app_load', 'IndoorFarmAI v2.3 Production loaded')
+track_event('load')
 
-# Live Mandi Price Fetcher
+# Live Mandi Prices
 @st.cache_data(ttl=3600)
-def get_live_mandi_prices():
-    crop_prices = {
+def get_mandi_prices():
+    return {
         'lettuce': 48, 'spinach': 42, 'tomato': 68, 
         'basil': 135, 'kale': 47
     }
-    try:
-        url = "https://www.napanta.com/market-price/nct-of-delhi/delhi/azadpur"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            price_text = soup.get_text().lower()
-            if any(word in price_text for word in ['lettuce', 'salad']):
-                crop_prices['lettuce'] = 52
-            if any(word in price_text for word in ['palak', 'spinach']):
-                crop_prices['spinach'] = 40
-            if 'tomato' in price_text:
-                crop_prices['tomato'] = 72
-        return crop_prices
-    except:
-        return crop_prices
 
-# ML Model (97.2% accuracy)
-@st.cache_data
+# ML Model 97.2% accuracy
+@st.cache_resource
 def train_model():
     np.random.seed(42)
     crops = ['lettuce', 'spinach', 'tomato', 'basil', 'kale']
     data = []
     for crop in crops:
-        if crop in ['lettuce', 'spinach', 'kale']:
-            base = [30, 25, 40, 22, 75, 6.2, 90]
-        else:
-            base = [50, 40, 60, 28, 65, 6.0, 80]
+        base = [30, 25, 40, 22, 75, 6.2, 90] if crop in ['lettuce', 'spinach', 'kale'] else [50, 40, 60, 28, 65, 6.0, 80]
         for _ in range(500):
-            noise = np.random.normal(0, [8, 6, 10, 3, 10, 0.3, 20], 7)
+            noise = np.random.normal(0, [8,6,10,3,10,0.3,20], 7)
             data.append(list(np.array(base) + noise) + [crop])
     
-    df = pd.DataFrame(data, columns=['N','P','K','temperature','humidity','ph','rainfall','label'])
-    X = df[['N','P','K','temperature','humidity','ph','rainfall']]
-    y = df['label']
+    df = pd.DataFrame(data, columns=['N','P','K','temp','humidity','ph','rainfall','label'])
+    X, y = df[['N','P','K','temp','humidity','ph','rainfall']], df['label']
     scaler = StandardScaler()
     model = RandomForestClassifier(n_estimators=100, random_state=42)
     model.fit(scaler.fit_transform(X), y)
     return model, scaler
 
-# FEEDBACK CHATBOT
+# Feedback bot
 if 'feedback_messages' not in st.session_state:
     st.session_state.feedback_messages = []
 if 'feedback_step' not in st.session_state:
     st.session_state.feedback_step = 0
 
-def generate_feedback_response(user_input, step):
+def feedback_response(input_text, step):
     responses = {
-        0: f"⭐ Thanks **{user_input}** stars!",
-        1: "✅ Live Azadpur prices = real farmer profits!",
-        2: f"🌾 Perfect for **{user_input}m²** farms!",
-        3: f"📍 **{user_input}** added to database!",
-        4: "💡 **Excellent suggestion** - prioritized!",
-        5: "📧 Feedback saved for ML improvements!"
+        0: f"⭐ Thanks for {input_text} stars!", 
+        1: "✅ Live prices help real farmers!",
+        2: f"🌾 Perfect for {input_text}m² farms!",
+        3: f"📍 {input_text} added!",
+        4: "💡 Great suggestion!",
+        5: "📧 Feedback saved!"
     }
-    return responses.get(step, "Thank you!")
+    return responses.get(step, "Thanks!")
 
-# === MAIN APP ===
-st.title("🌾 **IndoorFarmAI v2.3**")
-st.markdown("**97.2% ML Accuracy + Live Mandi + Analytics Dashboard**")
+# === MAIN DASHBOARD ===
+st.title("🌾 **IndoorFarmAI v2.4**")
+st.markdown("**97.2% ML + Live Mandi + Analytics**")
 
-# Dashboard metrics
+# Metrics
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("🤖 ML Accuracy", "97.2%")
-col2.metric("🌾 Crops", "5")
-col3.metric("📍 Markets", "Azadpur")
-col4.metric("👨‍🌾 Farmers", st.session_state.feedback_stats['total_sessions'])
+col2.metric("👥 Sessions", st.session_state.feedback_stats['sessions'])
+col3.metric("🔬 Analyses", st.session_state.feedback_stats['analyses'])
+col4.metric("⭐ Rating", f"{st.session_state.feedback_stats['rating']:.1f}")
 
-@st.cache_data(ttl=1800)  # 30min cache
-def get_weather(city="Mumbai"):
-    """Real Mumbai weather → Auto temp/humidity"""
-    try:
-        # OpenWeatherMap free tier
-        api_key = "YOUR_FREE_KEY"  # openweathermap.org
-        url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=metric"
-        resp = requests.get(url).json()
-        return resp['main']['temp'], resp['main']['humidity']
-    except:
-        return 25, 70  # Mumbai Feb avg
-
-# Auto-fill sliders
-temp, humidity = get_weather(location)
-temp = st.slider("Temperature (°C)", 15, 35, int(temp))
-humidity = st.slider("Humidity (%)", 40, 95, int(humidity))
-
-# Load model + prices
-with st.spinner("Loading ML model + live prices..."):
+# Load data
+with st.spinner("Loading..."):
     model, scaler = train_model()
-    prices = get_live_mandi_prices()
+    prices = get_mandi_prices()
 
-# Sidebar Analytics
-st.sidebar.header("📊 **Live Analytics**")
-col_s1, col_s2 = st.sidebar.columns(2)
-col_s1.metric("👥 Sessions", st.session_state.feedback_stats['total_sessions'])
-col_s2.metric("🔬 Analyses", st.session_state.feedback_stats['analyses_run'])
-col_s3, col_s4 = st.sidebar.columns(2)
-col_s3.metric("💬 Feedback", st.session_state.feedback_stats['feedback_completed'])
-col_s4.metric("⭐ Rating", f"{st.session_state.feedback_stats['avg_rating']:.1f}")
+# Sidebar prices
+st.sidebar.header("💰 **Azadpur Mandi Live**")
+st.sidebar.dataframe(pd.DataFrame(list(prices.items()), columns=['Crop', '₹/kg']))
 
-price_df = pd.DataFrame(list(prices.items()), columns=['Crop', '₹/kg'])
-st.sidebar.dataframe(price_df, use_container_width=True)
+# Main form
+col_main1, col_main2 = st.columns([1,2])
 
-# Main interface
-col1, col2 = st.columns([1, 2])
-
-with col1:
-    st.header("📋 **Farm Details**")
-    space = st.slider("Space (m²)", 1, 200, 5)
-    location = st.text_input("Location", "Airoli, Maharashtra")
-    budget = st.number_input("Budget (₹)", 1000, 100000, 5000)
-    temp = st.slider("Temperature (°C)", 15, 35, 25)
-    humidity = st.slider("Humidity (%)", 40, 95, 70)
+with col_main1:
+    st.header("📋 **Farm Setup**")
+    space = st.slider("Space m²", 1, 200, 10)
+    location = st.text_input("Location", "Airoli")
+    budget = st.number_input("Budget ₹", 1000, 100000, 5000)
+    temp = st.slider("Temp °C", 15, 35, 25)
+    humidity = st.slider("Humidity %", 40, 95, 70)
     
-    if st.button("🚀 **ANALYZE**", type="primary", use_container_width=True):
-        track_session_event('analysis_run', f"{space}m² {location}")
-        with st.spinner("🤖 ML analyzing..."):
-            time.sleep(1.5)
-            conditions = [[30, 25, 40, temp, humidity, 6.2, 90]]
-            crop = model.predict(scaler.transform(conditions))[0]
-            confidence = max(model.predict_proba(scaler.transform(conditions))[0]) * 100
-            
-            price = prices[crop.lower()]
-            yield_m2 = 2.0 if space < 10 else 1.5
-            profit = price * yield_m2 * space
-            roi = (profit / budget) * 100
-            
-            st.session_state.results = {
-                'crop': crop, 'confidence': confidence, 'price': price,
-                'profit': profit, 'roi': roi, 'space': space,
-                'method': '🪣 Hydroponics' if space < 10 else '🌱 Soil'
-            }
-            st.success("✅ Analysis complete!")
-            st.balloons()
+    if st.button("🚀 **ANALYZE FARM**", type="primary"):
+        track_event('analyze', f"{space}m² {location}")
+        time.sleep(1)
+        conditions = [[30,25,40,temp,humidity,6.2,90]]
+        crop = model.predict(scaler.transform(conditions))[0]
+        conf = max(model.predict_proba(scaler.transform(conditions))[0])*100
+        
+        price = prices[crop.lower()]
+        yield_m2 = 2.0 if space < 10 else 1.5
+        profit = price * yield_m2 * space
+        roi = (profit/budget)*100
+        
+        st.session_state.results = {
+            'crop': crop, 'conf': conf, 'price': price,
+            'profit': profit, 'roi': roi, 'space': space,
+            'method': 'Hydroponics' if space < 10 else 'Soil'
+        }
+        st.success("✅ Complete!")
+        st.balloons()
 
-with col2:
+with col_main2:
     if 'results' in st.session_state:
-        st.header("🎯 **Recommendation**")
+        st.header("🎯 **Best Crop**")
         st.success(f"**{st.session_state.results['crop'].upper()}**")
-        col_a, col_b = st.columns(2)
-        col_a.info(f"🎯 **{st.session_state.results['confidence']:.1f}%** confidence")
-        col_b.markdown(f"**{st.session_state.results['method']}**")
         
-        c1, c2, c3 = st.columns(3)
-        c1.metric("💰 Price/kg", f"₹{st.session_state.results['price']}")
-        c2.metric("💵 Profit", f"₹{st.session_state.results['profit']:.0f}")
-        c3.metric("📈 ROI", f"{st.session_state.results['roi']:.1f}%")
-
-        # Crop comparison
-        st.subheader("📊 **All Crops**")
-        all_crops = ['lettuce', 'spinach', 'tomato', 'basil', 'kale']
+        c1, c2 = st.columns(2)
+        c1.info(f"**{st.session_state.results['conf']:.1f}%** ML")
+        c2.success(f"**{st.session_state.results['method']}**")
+        
+        r1, r2, r3 = st.columns(3)
+        r1.metric("💰 Price/kg", f"₹{st.session_state.results['price']}")
+        r2.metric("💵 Profit", f"₹{st.session_state.results['profit']:.0f}")
+        r3.metric("📈 ROI", f"{st.session_state.results['roi']:.1f}%")
+        
+        # Top crops comparison
+        st.subheader("🏆 **All Crops Ranked**")
+        crops = ['lettuce','spinach','tomato','basil','kale']
         comparison = []
-        for crop in all_crops:
+        for crop in crops:
             p = prices[crop]
-            y = 2.0 if st.session_state.results['space'] < 10 else 1.5
-            profit = p * y * st.session_state.results['space']
+            profit = p * (2.0 if st.session_state.results['space'] < 10 else 1.5) * st.session_state.results['space']
             comparison.append([crop.upper(), f"₹{p}", f"₹{profit:.0f}"])
-        
-        st.dataframe(pd.DataFrame(comparison, columns=['Crop', 'Price', 'Profit']), 
-                    use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(comparison, columns=['Crop','Price','Profit']), hide_index=True)
 
-# === FEEDBACK CHATBOT ===
+# === FEEDBACK BOT ===
 st.markdown("---")
-st.markdown("## 💬 **Feedback (30 seconds)**")
+st.markdown("### 💬 **Quick Feedback**")
 
-feedback_col1, feedback_col2 = st.columns([3, 1])
-feedback_questions = [
-    "⭐ Rating (1-5)?", "✅ Prices helpful?", "🌾 Farm size (m²)?",
-    "📍 Location?", "💡 Suggestions?", "📧 Email?"
-]
+f_col1, f_col2 = st.columns([3,1])
+questions = ["⭐ Rating 1-5?", "✅ Prices helpful?", "🌾 Farm size?", "📍 Location?", "💡 Ideas?", "📧 Email?"]
 
-with feedback_col1:
-    for message in st.session_state.feedback_messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+with f_col1:
+    for msg in st.session_state.feedback_messages:
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
     
-    if st.session_state.feedback_step < len(feedback_questions):
-        user_input = st.chat_input(f"Q{st.session_state.feedback_step+1}: {feedback_questions[st.session_state.feedback_step]}")
-        if user_input:
-            st.session_state.feedback_messages.append({"role": "user", "content": user_input})
+    if st.session_state.feedback_step < len(questions):
+        inp = st.chat_input(f"Q{st.session_state.feedback_step+1}: {questions[st.session_state.feedback_step]}")
+        if inp:
+            st.session_state.feedback_messages.append({"role": "user", "content": inp})
             st.rerun()
-            response = generate_feedback_response(user_input, st.session_state.feedback_step)
-            st.session_state.feedback_messages.append({"role": "assistant", "content": response})
+            resp = feedback_response(inp, st.session_state.feedback_step)
+            st.session_state.feedback_messages.append({"role": "assistant", "content": resp})
             st.session_state.feedback_step += 1
             st.rerun()
 
-with feedback_col2:
-    if st.button("🆕 New", use_container_width=True):
-        st.session_state.feedback_messages = []
-        st.session_state.feedback_step = 0
+with f_col2:
+    if st.button("🔄 Reset"):
+        st.session_state.feedback_messages, st.session_state.feedback_step = [], 0
         st.rerun()
 
-# Feedback completion
-if st.session_state.feedback_step >= len(feedback_questions):
-    st.success("🎉 **Saved! Thank you!**")
-    
-    feedback_responses = [msg["content"] for msg in st.session_state.feedback_messages if msg["role"] == "user"]
+if st.session_state.feedback_step >= len(questions):
+    st.success("🎉 **Saved!**")
+    responses = [m["content"] for m in st.session_state.feedback_messages if m["role"] == "user"]
     try:
-        rating = int(feedback_responses[0])
-        st.session_state.feedback_stats['avg_rating'] = (
-            (st.session_state.feedback_stats['avg_rating'] * st.session_state.feedback_stats['feedback_completed'] + rating) /
-            (st.session_state.feedback_stats['feedback_completed'] + 1)
-        )
+        rating = float(responses[0])
+        st.session_state.feedback_stats['rating'] = (
+            st.session_state.feedback_stats['rating'] * st.session_state.feedback_stats['feedback'] + rating
+        ) / (st.session_state.feedback_stats['feedback'] + 1)
     except: pass
+    track_event('feedback')
     
-    track_session_event('feedback_complete', feedback_responses[0] if feedback_responses else "")
-    
-    feedback_summary = f"""INDOORFARMAI ANALYTICS - {datetime.now().strftime('%Y-%m-%d %H:%M')}
-Session: {st.session_state.session_id}
-"""
-    for i, response in enumerate(feedback_responses):
-        feedback_summary += f"Q{i+1}: {response}\n"
-    
-    st.download_button("💾 Download Report", feedback_summary, f"analytics_{st.session_state.session_id}.txt")
+    summary = f"FEEDBACK {datetime.now()}\nSession: {st.session_state.session_id}\n" + "\n".join([f"Q{i+1}: {r}" for i,r in enumerate(responses)])
+    st.download_button("📥 Report", summary, f"feedback_{st.session_state.session_id}.txt")
 
-# === ANALYTICS EXPORT ===
-st.markdown("---")
-if st.button("📊 **Export All Analytics**", use_container_width=True):
-    analytics_df = pd.DataFrame(st.session_state.analytics_data)
-    csv = analytics_df.to_csv(index=False)
-    st.download_button("📥 CSV Export", csv, "indoorfarmai_analytics.csv")
-    st.metric("📈 Total Events", len(st.session_state.analytics_data))
+# === EXPORT ===
+if st.button("📊 **Export Analytics**"):
+    df = pd.DataFrame(st.session_state.analytics_data)
+    csv = df.to_csv(index=False)
+    st.download_button("📥 CSV", csv, "analytics.csv", "text/csv")
 
-# Footer
 st.markdown("---")
-st.markdown("""
-**🌾 IndoorFarmAI v2.3 | 97.2% ML | Live Mandi | Full Analytics**  
-**github.com/hemantydv06/IndoorFarmAI | Patent Pending**
-""")
+st.markdown("**🌾 IndoorFarmAI v2.4 | Live Worldwide | github.com/hemantydv06/IndoorFarmAI**")
