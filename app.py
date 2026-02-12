@@ -101,6 +101,13 @@ with st.spinner("Loading..."):
 # Sidebar prices
 st.sidebar.header("💰 **Azadpur Mandi Live**")
 st.sidebar.dataframe(pd.DataFrame(list(prices.items()), columns=['Crop', '₹/kg']))
+if st.sidebar.button("🎯 Show My Crop Recommendations", use_container_width=True):
+    st.sidebar.success("✅ Settings Summary")
+    st.sidebar.info(f"**Temp:** {temp}°C")
+    st.sidebar.info(f"**Space:** {space}m²") 
+    st.sidebar.info(f"**Budget:** ₹{budget}")
+    st.sidebar.success(f"**BEST CROPS:** {top_crop1}, {top_crop2}, {top_crop3}")
+
 
 # Main form
 col_main1, col_main2 = st.columns([1,2])
