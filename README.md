@@ -17,5 +17,3 @@ https://indoorfarmai-icdxctspt36qsobu8bgmty.streamlit.app/
 - 📈 **Live Analytics** - Session tracking + CSV export
 - 📱 **Mobile Responsive** - Perfect for urban farmers
 - 📥 **Download Reports** - Farm plans + analytics
-
-## 🎓 A+++++ COLLEGE PROJECT
